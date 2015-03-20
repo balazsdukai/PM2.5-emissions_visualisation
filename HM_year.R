@@ -4,7 +4,8 @@
 # "lmomco". http://cran.r-project.org/web/packages/lmomco/index.html
 
 # install.packages(lmomco)
-# library (lmomco)
+library (lmomco)
+
 HM_year <- function (x) {
     y <- unique(x$year)
     HM  <- NULL

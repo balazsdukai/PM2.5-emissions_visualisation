@@ -1,5 +1,6 @@
 library(ggplot2)
-library(psych)
+source("HM_year.R")
+
 ## This first line will likely take a few seconds. Be patient!
 NEI <- readRDS("summarySCC_PM25.rds")
 SCC <- readRDS("Source_Classification_Code.rds")
@@ -25,3 +26,13 @@ NEI_SCC1_1 <- NEI[NEI$SCC == SCC1_1, ]
 emi1 <- NEI_SCC1_1[,"Emissions"] 
 year1 <- NEI_SCC1_1[, "year"]
 qplot(, emi)
+
+# calculate the harmonic means per year
+NEI_HM <- data.frame(year = unique(NEI$year), HM = HM_year(NEI))
+year <- unique(NEI$year)
+
+l <- qplot(data=NEI_HM, x=year, y=HM, xlim=c(1999,2008), geom="path")
+l + scale_x_continuous(breaks=year)
+l + labs(x="Year", y="Harmonic mean")
+
+# p  <- qplot(data=NEI, aes(x=NEI$year, y=NEI$Emissions), geom="point") –––– causes crash
