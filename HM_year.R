@@ -7,7 +7,6 @@
 library (lmomco)
 
 HM_year <- function (x) {
-    y <- unique(x$year)
     HM  <- NULL
     for (i in unique(x$year)) {
         m <- harmonic.mean(x[x$year == i, "Emissions"])
