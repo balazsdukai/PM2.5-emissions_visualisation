@@ -39,4 +39,20 @@ l + geom_point(shape=1, colour="Red") + geom_text(
 
 # p  <- qplot(data=NEI, aes(x=NEI$year, y=NEI$Emissions), geom="point") –––– causes crash
 
-qplot(data=NEI_SCC1_50, x=year, y=Emissions) + scale_x_continuous(breaks=year)
+qplot(data=NEI_SCC1_50, x=year, y=Emissions) + scale_x_continuous(breaks=year) 
+NEI_1_50_HM  <- data.frame(year = unique(NEI_SCC1_50$year), HM = HM_year(NEI_SCC1_50))
+
+l <- qplot(data=NEI_1_50_HM, x=year, y=HM, xlim=c(1999,2008), geom="path")
+l + geom_point(shape=1, colour="Red") + geom_text(
+    aes(label=round(NEI_1_50_HM$HM, digits=3)), hjust=-0.3, vjust=-0.4, 
+    size=4, colour="Red") + labs(
+        x="Year", y="Harmonic mean") + scale_x_continuous(breaks=year) + 
+    geom_point(data=NEI_SCC1_50, x=year, y=Emissions)
+
+l <- qplot(data=NEI_SCC1_50, x=year, y=Emissions) + scale_x_continuous(breaks=year)
+
+# plot all emissions yearly
+plot(Emissions ~ year, data=NEI_SCC1_50) # now how can I reproduce this with ggplot2?
+
+p  <- ggplot(NEI_SCC1_50, aes(x=year, y=Emissions)) + geom_point() + 
+    scale_x_continuous(breaks=year)
