@@ -31,19 +31,21 @@ p  <- ggplot(NEI_SCC1_50, aes(x=year, y=Emissions)) + geom_point() +
 # For that, the best tools are the histogram, density plot, boxplot.
 # So lets check a histogram first
 # Use year as the faceting variable
-ggplot(NEI_SCC1_50, aes(x=Emissions)) + geom_histogram(fill="red", colour="grey", binwidth=50) +
+h <- ggplot(NEI_SCC1_50, aes(x=Emissions)) + geom_histogram(fill="red", binwidth=50) +
     facet_grid(year ~ .)
+ggsave(h, filename="1_hist.svg")
+
+# density plot
+d <- ggplot(NEI_SCC1_50, aes(x=Emissions))
+d + geom_histogram(aes(y=..density..), fill="red", binwidth=50) + 
+    geom_density(fill=NA, colour="black") +
+    facet_grid(year ~ .)
+ggsave(d, filename="2_density.svg")
+
+# boxplot
+b <- ggplot(NEI_SCC1_50, aes(x=factor(year), y=Emissions)) + 
+    geom_boxplot(outlier.size=1.5, outlier.shape=21) +
+    labs(x="Year")
+ggsave(b, filename="3_boxplot.svg")
 
 
-# boxplots
-qplot(year,Emissions, data=NEI_SCC1_50, geom="boxplot")
-attach(NEI_SCC1_50)
-boxplot(Emissions,  data=NEI_SCC1_50)
-
-
-abc <- NEI_SCC1_50$Emissions
-b <- ggplot(abc, aes(x = X1, ymin = `0%`, lower = `25%`,
-                     middle = `50%`, upper = `75%`, ymax = `100%`))
-b + geom_boxplot(stat = "identity")
-b + geom_boxplot(stat = "identity") + coord_flip()
-b + geom_boxplot(aes(fill = X1), stat = "identity")
