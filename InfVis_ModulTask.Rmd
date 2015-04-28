@@ -5,21 +5,6 @@ date: "01.04.2015"
 output: pdf_document
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r}
-summary(cars)
-```
-
-You can also embed plots, for example:
-
-```{r, echo=FALSE}
-plot(cars)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
 ```{r}
 library(ggplot2)
@@ -48,4 +33,42 @@ qplot(data=NEI_HM, x=year, y=HM, xlim=c(1999,2008), geom="path") +
     size=4, colour="Red") + 
     labs(x="Year", y="Harmonic mean") + scale_x_continuous(breaks=year)
 ```
+
+
+Let's see a boxplot.
+A boxplot can help us to clearly visualise outliers in the data, altough its worth to know how actually the outliers are calculated. In the default settings of the ggplot2 those values are considered outliers that fall below the 2QR and above the 4QR +/- 1.5*the interquartile range (IQR).
+```{r, echo=FALSE}
+ggplot(NEI, aes(x=factor(year), y=Emissions)) + 
+    geom_boxplot(outlier.size=1.5, outlier.shape=21) +
+    labs(x="Year")
+```
+Well, it looks like that there are quite many of them. This can be a bit tricky and raises a couple of questions:
+1. compare the group of the outliers to the core values
+2. are those values really outliers?
+
+
+Lets exclude the outliers that were identified by the boxplot. Those values are considered outliers that fall below the 2QR and above the 4QR +/- 1.5*the interquartile range (IQR).
+```{r}
+upper.limit <- quantile(NEI$Emissions)[4] + 1.5*IQR(NEI$Emissions)
+lower.limit <- quantile(NEI$Emissions)[2] - 1.5*IQR(NEI$Emissions)
+```
+But notice that the lower limit is negative. Because as far as we know a negative emission doesn't make sense, we are going to manually set the lower limit 0.
+```{r}
+lower.limit <- 0
+```
+And now we can subset the data and create two groups. The first is going tho be the group without the previously identified outliers, the second group is the group of outliers where only the positive outliers are considered. 
+```{r}
+NEI_sub <- subset(NEI, Emissions<upper.limit & Emissions>lower.limit)
+NEI_outl <- subset(NEI, Emissions>upper.limit)
+```
+
+Let's check that boxplot again.
+```{r, echo=FALSE}
+ggplot(NEI_sub, aes(x=factor(year), y=Emissions)) + 
+    geom_boxplot(outlier.size=1.5, outlier.shape=21) +
+    labs(x="Year")
+```
+Notice the change on the y axis.
+
+We can compare the sum two groups
 
