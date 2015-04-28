@@ -2,6 +2,7 @@ library(ggplot2)
 source("HM_year.R")
 source("mean_year.R")
 source("~/Documents/lib_R/sum_year.R")
+source("~/Documents/lib_R/sum_by_category.R")
 library (lmomco)
 library (maptools)
 library (maps)
@@ -66,6 +67,23 @@ ggsave(total_year, filename="figs/v2_1_total_year.png", width=130, height=120, u
 
 
 # 2) lets compare the emissions by type–––––––––––––––––––––––––––––––––––––––––
+# first, add up the emissions by type for every year
+NEI_type_sum  <- sum_by_category(NEI_sub)
+
+# but check this!!!!!
+# library(plyr)
+# ddply(NEI_sub, c("type", "year"), summarise, Emissions_total=sum(Emissions))
+
+type_year <- ggplot(NEI_type_sum, aes(x=year, y=Emissions_total, linetype=type)) + 
+    geom_line() +
+    scale_x_continuous(breaks=NEI_sum$year) +
+    labs(x="Year", y="Total PM2.5 emissions (tons)") +
+    geom_point(shape=21, size=4, fill="white")
+ggsave(type_year, filename="figs/v2_2_type_year.png", width=130, height=120, units="mm")
+
+
+
+
 
 
 
