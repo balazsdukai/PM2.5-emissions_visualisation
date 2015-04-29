@@ -1,11 +1,14 @@
 library(ggplot2)
+library(plyr)
+library(dplyr)
 source("HM_year.R")
 source("mean_year.R")
 source("~/Documents/lib_R/sum_year.R")
 source("~/Documents/lib_R/sum_by_category.R")
-library (lmomco)
+source("~/Documents/lib_R/percent_change.R")
 library (maptools)
 library (maps)
+
 
 ## This first line will likely take a few seconds. Be patient!
 NEI <- readRDS("data/summarySCC_PM25.rds")
@@ -32,9 +35,8 @@ ggsave(d, filename="2_density.png")
 
 # boxplot
 b <- ggplot(NEI, aes(x=factor(year), y=Emissions)) + 
-    geom_boxplot(outlier.size=1.5, outlier.shape=21) +
-    labs(x="Year")
-ggsave(b, filename="3_boxplot.png")
+    geom_boxplot(outlier.size=1.5, outlier.shape=21)
+ggsave(b, filename="figs/3_boxplot.png")
 
 # Lets exclude the outliers that were identified by the boxplot, but also store them in a separate data frame.
 summary(NEI)
@@ -48,7 +50,7 @@ NEI_outl <- subset(NEI, Emissions>upper.limit)
 b <- ggplot(NEI_sub, aes(x=factor(year), y=Emissions)) + 
     geom_boxplot(outlier.size=1.5, outlier.shape=21) +
     labs(x="Year")
-ggsave(b, filename="3_boxplot_sub.png")
+ggsave(b, filename="figs/3_boxplot_sub.png")
 # ok, this made the boxplot, it looks better, but again, there are a lot of outliers, so I guess this is just the nature of the data, because
 
 
@@ -72,7 +74,7 @@ NEI_type_sum  <- sum_by_category(NEI_sub)
 
 # but check this!!!!!
 # library(plyr)
-# ddply(NEI_sub, c("type", "year"), summarise, Emissions_total=sum(Emissions))
+# a <- ddply(NEI_sub, c("type", "year"), summarise, Emissions_total=sum(Emissions))
 
 type_year <- ggplot(NEI_type_sum, aes(x=year, y=Emissions_total, linetype=type)) + 
     geom_line() +
@@ -81,6 +83,29 @@ type_year <- ggplot(NEI_type_sum, aes(x=year, y=Emissions_total, linetype=type))
     geom_point(shape=21, size=4, fill="white")
 ggsave(type_year, filename="figs/v2_2_type_year.png", width=130, height=120, units="mm")
 
+
+
+# 3) Percentage change in emissions–––––––––––––––––––––––––––––––––––––––––––––
+# first calculate the total emissions per year for every fips
+fips_year_all <- ddply(NEI_sub, c("fips", "year"), summarise, Emissions_total=sum(Emissions))
+fips_year <- fips_year_all[fips_year_all$year==1999 | fips_year_all$year==2008, ]
+# check
+tail(fips_year, 15)
+# therefore
+names.to.delete <- as.character(12901:12911)
+fips_year <- fips_year[!(rownames(fips_year) %in% names.to.delete), ] 
+# delete the fips that dont have a value for both 1999 and 2008
+fips_99 <- fips_year[fips_year$year==1999, "fips"]
+fips_08 <- fips_year[fips_year$year==2008, "fips"]
+fips.include <- intersect(fips_99, fips_08)
+fips_year2 <- fips_year[fips_year$fips %in% fips.include, ]
+# then calcuate the percentage change by every fips
+fips_CHG  <- data.frame(fips=as.numeric(), change=as.numeric())
+for (i in unique(fips_year2$fips)) {
+    e_99 <- fips_year2[fips_year2$fips==i & fips_year2$year==1999, "Emissions_total"]
+    e_08 <- fips_year2[fips_year2$fips==i & fips_year2$year==2008, "Emissions_total"]
+    fips_CHG <- rbind(fips_CHG, data.frame(fips=i, change=pc_change(e_99, e_08)))
+}
 
 
 
