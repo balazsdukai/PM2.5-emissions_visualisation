@@ -108,10 +108,21 @@ for (i in unique(fips_year2$fips)) {
     fips_CHG <- rbind(fips_CHG, data.frame(fips=i, Em.change=pc_change(e_05, e_08)))
 }
 head(fips_CHG)
+# then recode the continuous variables to categorical
+fips_CHG$category <- cut(fips_CHG$Em.change,
+                     breaks=c(-Inf,-100,-50,0, 50, 100, Inf),
+                     labels=c("<-100","-100-50","-50–0","0–50","50–100","100<"))
 
 # R for geospatial analysis
 county  <-  readOGR("/home/balazs/Downloads/R books/Learning-R-for-Geospatial-Analysis_Code/Data files/", 
                     "USA_2_GADM_fips", stringsAsFactors = FALSE) # need to use the FULL path
+county = county[
+    county$NAME_1 != "Alaska" &
+        county$NAME_1 != "Hawaii", ]
+county = county[county$TYPE_2 != "Water body", ]
+newProj = CRS("+proj=laea +lat_0=45 +lon_0=-100 
+	+x_0=0 +y_0=0 +a=6370997 +b=6370997 +units=m +no_defs")
+county = spTransform(county, newProj)
 county_f  <-  fortify(county, region = "FIPS")
 head(county_f)
 
@@ -131,8 +142,16 @@ sp_minimal  <-
           axis.title = element_blank(),
           axis.ticks = element_blank())
 
+# check the outline of the states
 ggplot() + 
     geom_polygon(data = states_f, 
+                 aes(x = long, y = lat, group = group), 
+                 colour = "black", fill = NA) +
+    coord_equal() +
+    sp_minimal
+# check the outline of the counties
+ggplot() + 
+    geom_polygon(data = county_f, 
                  aes(x = long, y = lat, group = group), 
                  colour = "black", fill = NA) +
     coord_equal() +
@@ -141,37 +160,15 @@ ggplot() +
 ggplot() + 
     geom_polygon(data = county_f, 
                  colour = NA, 
-                 aes(x = long, y = lat, group = group, fill = Em.change)) +
+                 aes(x = long, y = lat, group = group, fill = category)) +
     geom_polygon(data = states_f, 
                  colour = "white", size = 0.25, fill = NA,
                  aes(x = long, y = lat, group = group)) +
     coord_equal() +
-    sp_minimal
-    scale_fill_gradientn(
-        name = expression(paste("Emission change ("%")")), 
-        colours = rainbow(7), 
-        trans = "log10", 
-        labels = as.character,
-        breaks = 10^(-1:5))
+    sp_minimal +
+    scale_colour_brewer(palette="Set1")
 ggsave("figs/v2_3_CHGmap.png", width = 5.5, height = 3.25)
 
-# check data(county.fips) (maps) AND data(countyMapEnv)
-data(county.fips) # but it doesn't have all the fips I need!!!!!!!
-county_CHG <- merge(fips_CHG, county.fips, by="fips")
-us_county_map <- map_data("county")
-
-tidyr::separate(county_CHG, polyname, c("region", "subregion")
-
-
-# website
-
-map_data <- merge(us_state_map, dataset, by='region', all=T)
-map_data <- map_data[order(map_data$order), ]
-(qplot(long, lat, data=map_data, geom="polygon", group=group, fill=val)
- + theme_bw() + labs(x="", y="", fill="")
- + scale_fill_gradient(low='#EEEEEE', high='darkgreen')
- + opts(title="I was created using gplot2!",
-        legend.position="bottom", legend.direction="horizontal"))
 
 
 
