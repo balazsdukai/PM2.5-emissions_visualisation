@@ -1,13 +1,14 @@
 library(ggplot2)
 library(plyr)
-library(dplyr)
+#library(dplyr)
+library(rgdal)
+library(raster)
 source("HM_year.R")
 source("mean_year.R")
 source("~/Documents/lib_R/sum_year.R")
 source("~/Documents/lib_R/sum_by_category.R")
 source("~/Documents/lib_R/percent_change.R")
-library (maptools)
-library (maps)
+
 
 
 ## This first line will likely take a few seconds. Be patient!
@@ -83,91 +84,94 @@ type_year <- ggplot(NEI_type_sum, aes(x=year, y=Emissions_total, linetype=type))
     geom_point(shape=21, size=4, fill="white")
 ggsave(type_year, filename="figs/v2_2_type_year.png", width=130, height=120, units="mm")
 
+#####
+# There was a drastical increase in the point type of sources between 2005 and 2008, so we could focus on those in the later analysis
 
 
 # 3) Percentage change in emissions–––––––––––––––––––––––––––––––––––––––––––––
-# first calculate the total emissions per year for every fips
-fips_year_all <- ddply(NEI_sub, c("fips", "year"), summarise, Emissions_total=sum(Emissions))
-fips_year <- fips_year_all[fips_year_all$year==1999 | fips_year_all$year==2008, ]
-# check
-tail(fips_year, 15)
-# therefore
-names.to.delete <- as.character(12901:12911)
-fips_year <- fips_year[!(rownames(fips_year) %in% names.to.delete), ] 
-# delete the fips that dont have a value for both 1999 and 2008
-fips_99 <- fips_year[fips_year$year==1999, "fips"]
+# subset NEI_sub for type==POINT
+NEI_POINT <- NEI_sub[NEI_sub$type=="POINT", ]
+# calculate the total emissions per year for every fips
+fips_year_all <- ddply(NEI_POINT, c("fips", "year"), summarise, Emissions_total=sum(Emissions))
+# select those fips that have a value for 2005 OR 2008
+fips_year <- fips_year_all[fips_year_all$year==2005 | fips_year_all$year==2008, ]
+# delete the fips that dont have a value for both 2005 and 2008
+fips_05 <- fips_year[fips_year$year==2005, "fips"]
 fips_08 <- fips_year[fips_year$year==2008, "fips"]
-fips.include <- intersect(fips_99, fips_08)
+fips.include <- intersect(fips_05, fips_08)
 fips_year2 <- fips_year[fips_year$fips %in% fips.include, ]
 # then calcuate the percentage change by every fips
-fips_CHG  <- data.frame(fips=as.numeric(), change=as.numeric())
+fips_CHG  <- data.frame(fips=as.numeric(), Em.change=as.numeric())
 for (i in unique(fips_year2$fips)) {
-    e_99 <- fips_year2[fips_year2$fips==i & fips_year2$year==1999, "Emissions_total"]
+    e_05 <- fips_year2[fips_year2$fips==i & fips_year2$year==2005, "Emissions_total"]
     e_08 <- fips_year2[fips_year2$fips==i & fips_year2$year==2008, "Emissions_total"]
-    fips_CHG <- rbind(fips_CHG, data.frame(fips=i, change=pc_change(e_99, e_08)))
+    fips_CHG <- rbind(fips_CHG, data.frame(fips=i, Em.change=pc_change(e_05, e_08)))
 }
+head(fips_CHG)
+
+# R for geospatial analysis
+county  <-  readOGR("/home/balazs/Downloads/R books/Learning-R-for-Geospatial-Analysis_Code/Data files/", 
+                    "USA_2_GADM_fips", stringsAsFactors = FALSE) # need to use the FULL path
+county_f  <-  fortify(county, region = "FIPS")
+head(county_f)
+
+colnames(county_f)[which(colnames(county_f) == "id")] = "fips"
+county_f  <-  join(county_f, fips_CHG, "fips")
+head(county_f)
+
+states  <-  getData("GADM", country = "USA", level = 1)
+states  <-  states[!(states$NAME_1 %in% c("Alaska", "Hawaii")), ]
+states  <-  spTransform(states, CRS(proj4string(county)))
+states_f  <-  fortify(states, region = "NAME_1")
+head(states_f)
+
+sp_minimal  <- 
+    theme_bw() +
+    theme(axis.text = element_blank(),
+          axis.title = element_blank(),
+          axis.ticks = element_blank())
+
+ggplot() + 
+    geom_polygon(data = states_f, 
+                 aes(x = long, y = lat, group = group), 
+                 colour = "black", fill = NA) +
+    coord_equal() +
+    sp_minimal
+
+ggplot() + 
+    geom_polygon(data = county_f, 
+                 colour = NA, 
+                 aes(x = long, y = lat, group = group, fill = Em.change)) +
+    geom_polygon(data = states_f, 
+                 colour = "white", size = 0.25, fill = NA,
+                 aes(x = long, y = lat, group = group)) +
+    coord_equal() +
+    sp_minimal
+    scale_fill_gradientn(
+        name = expression(paste("Emission change ("%")")), 
+        colours = rainbow(7), 
+        trans = "log10", 
+        labels = as.character,
+        breaks = 10^(-1:5))
+ggsave("figs/v2_3_CHGmap.png", width = 5.5, height = 3.25)
+
+# check data(county.fips) (maps) AND data(countyMapEnv)
+data(county.fips) # but it doesn't have all the fips I need!!!!!!!
+county_CHG <- merge(fips_CHG, county.fips, by="fips")
+us_county_map <- map_data("county")
+
+tidyr::separate(county_CHG, polyname, c("region", "subregion")
+
+
+# website
+
+map_data <- merge(us_state_map, dataset, by='region', all=T)
+map_data <- map_data[order(map_data$order), ]
+(qplot(long, lat, data=map_data, geom="polygon", group=group, fill=val)
+ + theme_bw() + labs(x="", y="", fill="")
+ + scale_fill_gradient(low='#EEEEEE', high='darkgreen')
+ + opts(title="I was created using gplot2!",
+        legend.position="bottom", legend.direction="horizontal"))
 
 
 
-
-
-
-
-
-# try the histogram again
-h <- ggplot(NEI_sub, aes(x=Emissions)) + geom_histogram(fill="red") +
-    facet_grid(year ~ .)
-ggsave(h, filename="1_hist_sub.png")
-
-# also for the outliers
-h <- ggplot(NEI_outl, aes(x=Emissions)) + geom_histogram(fill="red") +
-    facet_grid(year ~ .)
-ggsave(h, filename="1_hist_outl.png")
-
-
-# compare the two groups by the sum of emissions and the number of unique SCCs (IDs)
-min(sum(NEI_outl$Emissions), sum(NEI_sub$Emissions))
-sum(NEI_outl$Emissions)
-sum(NEI_sub$Emissions)
-
-length(unique(NEI_outl$SCC))
-length(unique(NEI_sub$SCC))
-length(unique(NEI$SCC)) == length(unique(NEI_sub$SCC)) + length(unique(NEI_outl$SCC))
-# well, the SCC are not matching...what to do...
-# take the intersection of both data frames by common SCC. These SCC then probably require closer attention.
-
-NEI_merge2 <- subset(NEI_sub, SCC %in% NEI_outl$SCC)
-
-h <- ggplot(NEI_merge, aes(x=Emissions)) + geom_histogram(fill="red") +
-    facet_grid(year ~ .)
-ggsave(h, filename="1_hist_merge.png")
-
-# lets calculate the harmonic mean again and plot it
-NEI_sub_HM  <- data.frame(year = unique(NEI_sub$year), HM = HM_year(NEI_sub))
-NEI_sub_M  <- data.frame(year = unique(NEI_sub$year), M = mean_year(NEI_sub))
-
-sub_hm  <- ggplot(NEI_sub, aes(x=year, y=Emissions)) + geom_point() + 
-    scale_x_continuous(breaks=year) +
-    labs(x="Year", y="Emissions") + 
-    geom_line(data=NEI_sub_HM, aes(x=year, y=HM)) +
-    geom_point(data=NEI_sub_HM, aes(x=year, y=HM), shape=1, colour="Red") + 
-    geom_text(data=NEI_sub_HM, aes(x=year, y=HM, label=round(NEI_sub_HM$HM, digits=3)), 
-              hjust=-0.3, vjust=-0.4, size=4, colour="Red")
-ggsave(sub_hm, filename="3_sub_hm.png")
-
-sub_m  <- ggplot(NEI_sub, aes(x=year, y=Emissions)) + geom_point() + 
-    scale_x_continuous(breaks=year) +
-    labs(x="Year", y="Emissions") + 
-    geom_line(data=NEI_sub_M, aes(x=year, y=M)) +
-    geom_point(data=NEI_sub_M, aes(x=year, y=M), shape=1, colour="Red") + 
-    geom_text(data=NEI_sub_M, aes(x=year, y=M, label=round(NEI_sub_M$M, digits=3)), 
-              hjust=-0.3, vjust=-0.4, size=4, colour="Red")
-ggsave(sub_m, filename="4_sub_m.png") # its nice, but doesn't really need all of the dots
-
-# lets check the mean emissions by type
-meanem <- tapply(NEI_sub$Emissions, NEI_sub$type, mean)
-type <- factor(unique(NEI_sub$type))
-qplot(type, meanem, xlab(x=Type, y=Mean emissions))
-
-dot <- ggplot(NEI_sub, aes(x=type))
-dot + stat_function(fun=tapply(NEI_sub$Emissions, NEI_sub$type, mean))
