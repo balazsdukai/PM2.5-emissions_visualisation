@@ -60,10 +60,11 @@ ggsave(b, filename="figs/3_boxplot_sub.png")
 NEI_sum  <- data.frame(year = unique(NEI_sub$year), S = sum_year(NEI_sub))
 
 total_year  <- ggplot(NEI_sum, aes(x=year, y=S)) +
-    geom_point(shape=1) + 
+    geom_line() +
+    geom_point(shape=21, size=3, fill="white") + 
     scale_x_continuous(breaks=NEI_sum$year) +
     labs(x="Year", y="Total PM2.5 emissions (tons)") + 
-    geom_line()
+    theme_minimal(base_size = 12, base_family = "Verdana")
    # geom_text(aes(x=year, y=S, label=round(NEI_sum$S, digits=1)), 
    #           hjust=1.2, vjust=-0.8, size=2.5)
 ggsave(total_year, filename="figs/v2_1_total_year.png", width=130, height=120, units="mm")
@@ -86,6 +87,20 @@ ggsave(type_year, filename="figs/v2_2_type_year.png", width=130, height=120, uni
 
 #####
 # There was a drastical increase in the point type of sources between 2005 and 2008, so we could focus on those in the later analysis
+# so lets highlight it
+
+type_year <- ggplot(NEI_type_sum, aes(x=year, y=Emissions_total, linetype=type)) + 
+    geom_line() +
+    scale_x_continuous(breaks=NEI_sum$year) +
+    labs(x="Year", y="Total PM2.5 emissions (tons)") +
+    geom_line(data=(NEI_type_sum[NEI_type_sum$type=="POINT" & NEI_type_sum$year==c(2005,2008), ]),
+              aes(colour="#ef8a62"), lwd=1.2) + 
+    guides(colour=FALSE) +
+    geom_point(shape=21, size=3, fill="white") +
+    theme_minimal(base_size = 12, base_family = "Verdana")
+ggsave(type_year, filename="figs/v2_2_type_year2.png")
+
+
 
 
 # 3) Percentage change in emissions–––––––––––––––––––––––––––––––––––––––––––––
@@ -110,8 +125,8 @@ for (i in unique(fips_year2$fips)) {
 head(fips_CHG)
 # then recode the continuous variables to categorical
 fips_CHG$category <- cut(fips_CHG$Em.change,
-                     breaks=c(-Inf,-100,-50,0, 50, 100, Inf),
-                     labels=c("<-100","-100-50","-50–0","0–50","50–100","100<"))
+                     breaks=c(-Inf,-200, 200, Inf),
+                     labels=c("<-200","-200–200","200<"))
 
 # R for geospatial analysis
 county  <-  readOGR("/home/balazs/Downloads/R books/Learning-R-for-Geospatial-Analysis_Code/Data files/", 
@@ -162,13 +177,20 @@ ggplot() +
                  colour = NA, 
                  aes(x = long, y = lat, group = group, fill = category)) +
     geom_polygon(data = states_f, 
-                 colour = "white", size = 0.25, fill = NA,
+                 colour = "#999999", size = 0.25, fill = NA,
                  aes(x = long, y = lat, group = group)) +
     coord_equal() +
     sp_minimal +
-    scale_colour_brewer(palette="Set1")
-ggsave("figs/v2_3_CHGmap.png", width = 5.5, height = 3.25)
+    scale_fill_manual(
+        values = c("<-200"="#999999", "-200–200"="#ffffff", "200<"="#ef8a62")
+        )
+ggsave("figs/v2_3_CHGmap2.png", width = 5.5, height = 3.25)
+# this map shows in which counties were more than 200% increase in the emissions between 2005 and 2008
 
-
-
-
+# 4) histogram to check the emission change for extreme values
+ggplot() +
+    geom_histogram(data=fips_CHG, aes(x=Em.change, fill="#ef8a62")) +
+    annotate("rect", xmin=150, xmax=max(fips_CHG$Em.change), 
+             ymin=-1, ymax=2001, alpha=.1, fill="blue") +
+    labs(x="Emission percent change", y="Number of observations")
+    # try with binwidth=50
