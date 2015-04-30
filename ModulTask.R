@@ -1,12 +1,8 @@
 library(ggplot2)
 library(plyr)
-#library(dplyr)
 library(rgdal)
 library(raster)
-source("HM_year.R")
-source("mean_year.R")
 source("~/Documents/lib_R/sum_year.R")
-source("~/Documents/lib_R/sum_by_category.R")
 source("~/Documents/lib_R/percent_change.R")
 
 
@@ -73,12 +69,9 @@ ggsave(total_year, filename="figs/v2_1_total_year.png")
 
 # 2) lets compare the emissions by type–––––––––––––––––––––––––––––––––––––––––
 # first, add up the emissions by type for every year
-NEI_type_sum  <- sum_by_category(NEI_sub)
+NEI_type_sum  <- ddply(NEI_sub, c("type", "year"), summarise, Emissions_total=sum(Emissions))
 
-# but check this!!!!!
-# library(plyr)
-# a <- ddply(NEI_sub, c("type", "year"), summarise, Emissions_total=sum(Emissions))
-
+# create the plotr
 type_year <- ggplot(NEI_type_sum, aes(x=year, y=Emissions_total, linetype=type)) + 
     geom_line() +
     scale_x_continuous(breaks=NEI_sum$year) +
@@ -103,14 +96,10 @@ type_year <- ggplot(NEI_type_sum, aes(x=year, y=Emissions_total,
     theme_minimal(base_size = 12, base_family = "Verdana")
 ggsave(type_year, filename="figs/v2_2_type_year2.png")
 
-
-
-
-# 3) Percentage change in emissions–––––––––––––––––––––––––––––––––––––––––––––
+# 3) histogram to check the emission change for extreme values––––––––––––––––––
+# first calculate the percentage change in emissions
 # subset NEI_sub for type==POINT
 NEI_POINT <- NEI_sub[NEI_sub$type=="POINT", ]
-# calculate the total emissions per year for every fips
-fips_year_all <- ddply(NEI_POINT, c("fips", "year"), summarise, Emissions_total=sum(Emissions))
 # select those fips that have a value for 2005 OR 2008
 fips_year <- fips_year_all[fips_year_all$year==2005 | fips_year_all$year==2008, ]
 # delete the fips that dont have a value for both 2005 and 2008
@@ -126,10 +115,38 @@ for (i in unique(fips_year2$fips)) {
     fips_CHG <- rbind(fips_CHG, data.frame(fips=i, Em.change=pc_change(e_05, e_08)))
 }
 head(fips_CHG)
+
+# then we analyse it with a histogram
+ggplot() +
+    geom_histogram(data=fips_CHG, aes(x=Em.change, fill="#ef8a62")) +
+    labs(x="PM2.5 Emission change (%), 2005–2008", y="Number of observations") +
+    guides(fill=F) +
+    theme_minimal(base_size = 12, base_family = "Verdana")
+ggsave("figs/v2_3_hist1.png")
+
+# if I zoom in:
+v <- 600
+br <- seq.int(from=0, to=5000, by=1000)
+ggplot() +
+    geom_histogram(data=fips_CHG, aes(x=Em.change, fill="#ef8a62"), binwidth=100) +
+    scale_x_continuous(limits=c(-100, 5000), breaks=c(br, v)) +
+    labs(x="PM2.5 Emission change (%), 2005–2008" , y="Number of observations") +
+    guides(fill=F) +
+    geom_vline(xintercept=v) +
+    theme_minimal(base_size = 12, base_family = "Verdana")
+ggsave("figs/v2_3_hist2.png")
+
+# therefore we limit the data frame to Em.change<=600
+fips_CHG_lim <- fips_CHG[fips_CHG$Em.change<=600, ]
+
+
+
+# 3) Percentage change in emissions–––––––––––––––––––––––––––––––––––––––––––––
+
 # then recode the continuous variables to categorical
-fips_CHG$category <- cut(fips_CHG$Em.change,
-                     breaks=c(-Inf,-200, 200, Inf),
-                     labels=c("<-200","-200–200","200<"))
+fips_CHG_lim$category <- cut(fips_CHG_lim$Em.change,
+                     breaks=c(-100, 0, 100, 200, 600), # because of min(fips_CHG_lim$Em.change)
+                     labels=c("-100–0%","0–100%","100–200%","200–600%"))
 
 # R for geospatial analysis
 county  <-  readOGR("/home/balazs/Downloads/R books/Learning-R-for-Geospatial-Analysis_Code/Data files/", 
@@ -145,7 +162,7 @@ county_f  <-  fortify(county, region = "FIPS")
 head(county_f)
 
 colnames(county_f)[which(colnames(county_f) == "id")] = "fips"
-county_f  <-  join(county_f, fips_CHG, "fips")
+county_f  <-  join(county_f, fips_CHG_lim, "fips")
 head(county_f)
 
 states  <-  getData("GADM", country = "USA", level = 1)
@@ -155,7 +172,7 @@ states_f  <-  fortify(states, region = "NAME_1")
 head(states_f)
 
 sp_minimal  <- 
-    theme_bw() +
+    theme_minimal(base_size = 12, base_family = "Verdana") +
     theme(axis.text = element_blank(),
           axis.title = element_blank(),
           axis.ticks = element_blank())
@@ -177,35 +194,24 @@ ggplot() +
 
 ggplot() + 
     geom_polygon(data = county_f, 
-                 colour = NA, 
+                 colour = "white",
+                 size = 0.15,
                  aes(x = long, y = lat, group = group, fill = category)) +
     geom_polygon(data = states_f, 
-                 colour = "#999999", size = 0.15, fill = NA,
+                 colour = "#999999", 
+                 size = 0.18, 
+                 fill = NA,
                  aes(x = long, y = lat, group = group)) +
     coord_equal() +
     sp_minimal +
-    scale_fill_manual(
-        values = c("<-200"="#999999", "-200–200"="#ffffff", "200<"="#ef8a62")
-        )
-ggsave("figs/v2_3_CHGmap2.png")
-# this map shows in which counties were more than 200% increase in the emissions between 2005 and 2008
+    scale_fill_manual(values = c("-100–0%"="#d1e5f0",
+                                 "0–100%"="#fddbc7",
+                                 "100–200%"="#ef8a62",
+                                 "200–600%"="#b2182b"),
+                      name = expression(paste("Change in emissions")))
+ggsave("figs/v2_4_CHGmap.png")
+# this map shows in which counties were more than increase in the emissions between 2005 and 2008
 
-# 4) histogram to check the emission change for extreme values
-ggplot() +
-    geom_histogram(data=fips_CHG, aes(x=Em.change, fill="#ef8a62")) +
-    labs(x="Emission percent change", y="Number of observations") +
-    guides(fill=F) +
-    theme_minimal(base_size = 12, base_family = "Verdana")
-# if I zoom in:
-v <- 600
-br <- seq.int(from=-100, to=5000, by=1000)
-ggplot() +
-    geom_histogram(data=fips_CHG, aes(x=Em.change, fill="#ef8a62"), binwidth=100) +
-    scale_x_continuous(limits=c(-100, 5000), breaks=c(br, v)) +
-    labs(x="Emission change, 2005–2008 (%)" , y="Number of observations") +
-    guides(fill=F) +
-    geom_vline(xintercept=v) +
-    theme_minimal(base_size = 12, base_family = "Verdana")
      
     
 
