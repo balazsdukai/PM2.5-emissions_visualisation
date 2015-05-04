@@ -1,74 +1,294 @@
 ---
-title: "InfVis Modul Task"
+title: "MSE InfVis Module Task"
 author: "Balázs Dukai"
-date: "01.04.2015"
-output: pdf_document
+date: "06.05.2015"
+output: html_document
 ---
 
+## Summary
 
-```{r}
+Fine particulate matter (PM2.5) is an ambient air pollutant with diameter of 2.5 micrometers or less, for which there is a strong evidence that is harmful to human health. This work explores the change in PM2.5 emissions through ten years in the USA. As a result, those counties are highlighted which experienced surprisingly high increase of emissions between 1999–2008.
+
+Emissions data retrieved from: http://www.epa.gov/ttn/chief/net/2008inventory.html
+
+#### Literature:
+
+1. Chang, W., 2013. R graphics cookbook: practical recipes for visualizing data, 1st ed. ed.           O’Reilly, Beijing.
+2. Dorman, M., 2014. Learning R for geospatial analysis: leverage the power of R to elegantly manage crucial geospatial analysis tasks. Packt Publishing, Birmingham.
+3. Particulates, 2015. . Wikipedia Free Encycl. Retrieved 03.05.2015.
+4. Wickham, H., 2009. ggplot2: Elegant Graphics for Data Analysis. Springer New York.
+
+Module supervisor: Prof. Dr. Susanne Bleisch
+
+----
+
+Load the necessary packages and custom functions.
+```{r load_packages, results="hide"}
 library(ggplot2)
-source("HM_year.R")
+library(plyr)
+library(rgdal)
+library(raster)
+library(grid)
+source("R/sum_year.R")
+source("R/percent_change.R")
 ```
 
-The first line will take a few seconds!
-```{r}
-NEI <- readRDS("summarySCC_PM25.rds")
-SCC <- readRDS("Source_Classification_Code.rds")
+Read in the emissions data, it will take a few seconds!
+```{r read_data}
+NEI <- readRDS("data/summarySCC_PM25.rds")
 attach(NEI)
-attach(SCC)
-```
-
-Calculate the harmonic mean per year
-```{r}
-NEI_HM <- data.frame(year = unique(NEI$year), HM = HM_year(NEI))
-year <- unique(NEI$year)
-```
-
-And the plot:
-```{r, echo=F}
-qplot(data=NEI_HM, x=year, y=HM, xlim=c(1999,2008), geom="path") + 
-    geom_point(shape=1, colour="Red") + 
-    geom_text(aes(label=round(NEI_HM$HM, digits=2)), hjust=-0.3, vjust=-0.4, 
-    size=4, colour="Red") + 
-    labs(x="Year", y="Harmonic mean") + scale_x_continuous(breaks=year)
+head(NEI)
 ```
 
 
-Let's see a boxplot.
-A boxplot can help us to clearly visualise outliers in the data, altough its worth to know how actually the outliers are calculated. In the default settings of the ggplot2 those values are considered outliers that fall below the 2QR and above the 4QR +/- 1.5*the interquartile range (IQR).
-```{r, echo=FALSE}
+## Data preparation and overview
+
+We need to see how the data is distributed and whats the case with the outliers.
+For that, the best tools are the histogram, density plot, box plot.
+So lets check a histogram first, using year as the faceting variable
+
+```{r histogram, echo=FALSE}
+ggplot(NEI, aes(x=Emissions)) + 
+    geom_histogram(fill="red", binwidth=50) +
+    facet_grid(year ~ .)
+```
+
+Density plot.
+
+```{r density_plot, echo=F}
+ggplot(NEI, aes(x=Emissions)) + 
+    geom_histogram(aes(y=..density..), fill="red", binwidth=50) + 
+    geom_density(fill=NA, colour="black") +
+    facet_grid(year ~ .)
+```
+
+Let's see a box plot.
+A box plot can help us to clearly visualize outliers in the data, although its worth to know how actually the outliers are calculated. In the default settings of the ggplot2 those values are considered outliers that fall below the 2QR and above the 4QR +/- 1.5*the interquartile range (IQR).
+```{r box_plot, echo=FALSE}
 ggplot(NEI, aes(x=factor(year), y=Emissions)) + 
     geom_boxplot(outlier.size=1.5, outlier.shape=21) +
     labs(x="Year")
 ```
+
 Well, it looks like that there are quite many of them. This can be a bit tricky and raises a couple of questions:
-1. compare the group of the outliers to the core values
-2. are those values really outliers?
+1. How are these extreme values compared to the "core" values?
+2. Are those values really outliers, or this is the nature of the data?
 
-
-Lets exclude the outliers that were identified by the boxplot. Those values are considered outliers that fall below the 2QR and above the 4QR +/- 1.5*the interquartile range (IQR).
-```{r}
+Unfortunately, we in the scope of this project we cannot really go so deep into this topic as it would require, therefore we choose the easy path and just exclude them from the further analysis because they would strongly skew the results.
+Excluding the outliers:
+```{r limits}
 upper.limit <- quantile(NEI$Emissions)[4] + 1.5*IQR(NEI$Emissions)
 lower.limit <- quantile(NEI$Emissions)[2] - 1.5*IQR(NEI$Emissions)
+lower.limit
 ```
-But notice that the lower limit is negative. Because as far as we know a negative emission doesn't make sense, we are going to manually set the lower limit 0.
-```{r}
+But notice that the lower limit is negative. Because as far as we know a negative emission doesn't make sense, we are going to manually set the lower limit to 0.
+```{r limits2}
 lower.limit <- 0
 ```
-And now we can subset the data and create two groups. The first is going tho be the group without the previously identified outliers, the second group is the group of outliers where only the positive outliers are considered. 
-```{r}
+
+And now we can subset the data and create two groups. The first is going tho be the group without the previously identified outliers, the second group is the group of outliers where only the positive outliers are considered. The group for the outliers is necessary in case we want to analyse them more in detail later on, but in this case we continue without the outliers.
+```{r NEI_sub, results="hide"}
 NEI_sub <- subset(NEI, Emissions<upper.limit & Emissions>lower.limit)
 NEI_outl <- subset(NEI, Emissions>upper.limit)
 ```
 
-Let's check that boxplot again.
-```{r, echo=FALSE}
-ggplot(NEI_sub, aes(x=factor(year), y=Emissions)) + 
-    geom_boxplot(outlier.size=1.5, outlier.shape=21) +
-    labs(x="Year")
-```
-Notice the change on the y axis.
 
-We can compare the sum two groups
+## Data analysis
+
+First, let's see how the emissions changed through ten years in the whole country. For that, we need to summarize the emissions per year.
+```{r NEI_sum, results="hide"}
+NEI_sum  <- data.frame(year = unique(NEI_sub$year), S = sum_year(NEI_sub))
+```
+
+And create a line graph.
+
+```{r line_graph1, echo=FALSE}
+ggplot(NEI_sum, aes(x=year, y=S)) +
+    geom_line(lwd=0.9) + 
+    scale_x_continuous(breaks=NEI_sum$year) +
+    scale_y_continuous(limits=c(0, 38500)) +
+    labs(x="Year", y="Total PM2.5 emissions (tons)") + 
+    geom_point(shape=21, size=2, fill="white") +
+    coord_fixed(ratio = 0.0003) +
+    theme_minimal(base_size = 10, base_family = "Verdana")
+```
+
+We can observe an overall increase between 2005 and 2008. What happens if we zoom in and subdivide by emissions source?
+Again, sum up the data by source type and year.
+```{r type_sum, results="hide"}
+NEI_type_sum  <- ddply(NEI_sub, c("type", "year"), summarise, Emissions_total=sum(Emissions))
+```
+
+And create a similar plot than before.
+
+```{r line_graph2, echo=FALSE}
+ggplot(NEI_type_sum, aes(x=year, y=Emissions_total, linetype=type)) + 
+    geom_line(lwd=0.6) +
+    scale_x_continuous(breaks=NEI_sum$year) +
+    scale_y_continuous(limits=c(0, 38500)) +
+    labs(x="Year", y="Total PM2.5 emissions (tons)", linetype="PM2.5 emission source") +
+    geom_line(data=(NEI_type_sum[NEI_type_sum$type=="POINT" & 
+                                    NEI_type_sum$year==c(2005,2008), ]),
+              aes(colour="#b2182b"), 
+              lwd=1.2) + 
+    guides(colour=FALSE) +
+    geom_point(shape=21, size=2, fill="white") +
+    theme_minimal(base_size = 10, base_family = "Verdana") +
+    coord_fixed(ratio = 0.0003) 
+```
+
+We can observe, that the increase in emissions was mainly caused by POINT type of sources.
+Additionally, on this plot the interesting range is highlighted with red. This is what we are going to focus on next.
+
+We are going to calculate the percentage change in emissions in POINT sources between 2005 and 2008 to see if there are extreme values that could have caused that obvious increase.
+First calculate the percentage change in emissions. subset NEI_sub for type==POINT
+```{r NEI_POINT, results="hide"}
+NEI_POINT <- NEI_sub[NEI_sub$type=="POINT", ] # subset NEI_sub for type==POINT
+```
+Calculate the total emissions per year for every fips.
+```{r fips, results="hide"}
+fips_year_all <- ddply(NEI_POINT, c("fips", "year"), summarise, Emissions_total=sum(Emissions))
+```
+Select those fips that have a value for 2005 OR 2008.
+```{r fips_year1,results="hide"}
+fips_year <- fips_year_all[fips_year_all$year==2005 | fips_year_all$year==2008, ]
+```
+Delete the fips that don't have a value for both 2005 and 2008.
+```{r fips_year2, results="hide"}
+fips_05 <- fips_year[fips_year$year==2005, "fips"]
+fips_08 <- fips_year[fips_year$year==2008, "fips"]
+fips.include <- intersect(fips_05, fips_08)
+fips_year <- fips_year[fips_year$fips %in% fips.include, ]
+```
+Then calculate the percentage change by every fips.
+```{r fips_CHG}
+fips_CHG  <- data.frame(fips=as.numeric(), Em.change=as.numeric())
+for (i in unique(fips_year$fips)) {
+    e_05 <- fips_year[fips_year$fips==i & fips_year$year==2005, "Emissions_total"]
+    e_08 <- fips_year[fips_year$fips==i & fips_year$year==2008, "Emissions_total"]
+    fips_CHG <- rbind(fips_CHG, data.frame(fips=i, Em.change=pc_change(e_05, e_08)))
+}
+head(fips_CHG)
+```
+
+Now we plot a histogram.
+
+```{r histogram_lim, echo=FALSE}
+ggplot() +
+    geom_histogram(data=fips_CHG, aes(x=Em.change, fill="#ef8a62")) +
+    theme_minimal(base_size = 12, base_family = "Verdana") +
+    labs(x="PM2.5 Emission change (%)", y="Number of observations") +
+    guides(fill=F) +
+    coord_fixed(ratio = 1000) +
+    annotate("text", 
+             x=1250000, 
+             y=1850, 
+             label="Emission source:\nPOINT\n Year: 2005–2008", 
+             lineheight=1.2,
+             size=5)
+```
+Unfortunately there is not much we can see, but if we take a look at the scale of the x-axis, we can observe some very high values. Common sense says that change of this magnitude is unlikely to be realistic. Therefore we zoom in to the data to see if we can identify the distribution.
+
+```{r histogram_lim2, echo=FALSE}
+v <- 600
+br <- seq.int(from=0, to=5000, by=1000)
+ggplot() +
+    geom_histogram(data=fips_CHG, aes(x=Em.change, fill="#ef8a62"), binwidth=100) +
+    scale_x_continuous(limits=c(-100, 5000), breaks=c(br, v)) +
+    labs(x="PM2.5 Emission change (%)" , y="Number of observations") +
+    guides(fill=F) +
+    geom_vline(xintercept=v, linetype="dashed") +
+    coord_fixed(ratio = 5) +
+    annotate("text", 
+             x=4500, 
+             y=620, 
+             label="Emission source:\nPOINT\n Year: 2005–2008", 
+             lineheight=1.2,
+             size=5) + 
+    theme_minimal(base_size = 12, base_family = "Verdana")
+```
+
+The histogram shows the percentage change in emissions from POINT sources between 2005 and 2008. Because the histogram drops at 600% and common sense dictates that a change in the thousand percent range is unlikely, the values above 600% were excluded from the further analysis. Hence, we subset our data again.
+```{r fips_CHG_lim, results="hide"}
+fips_CHG_lim <- fips_CHG[fips_CHG$Em.change<=600, ]
+```
+
+
+Now we can plot the values on a map, to see if we can identify any pattern.
+But first we need to re-code the continuous variables to categorical.
+```{r to_categorical, results="hide"}
+fips_CHG_lim$category <- cut(fips_CHG_lim$Em.change,
+                     breaks=c(-100, 0, 100, 200, 600), # -100 because of min(fips_CHG_lim$Em.change)
+                     labels=c("-100–0%","0–100%","100–200%","200–600%"))
+```
+
+Let's prepare the data for the map. Where the geographical data for the map is directly downloaded from the database of global administrative boundaries.
+First, get and prepare the data for the county boundaries.
+```{r county1}
+county  <-  readOGR("/home/balazs/Documents/MSE_Geoinformationstechnologie/InfVis/ModulTask/data", "USA_2_GADM_fips", stringsAsFactors = FALSE) # need to provide a full path
+county = county[
+    county$NAME_1 != "Alaska" &
+        county$NAME_1 != "Hawaii", ]
+county = county[
+    county$TYPE_2 != "Water body", ]
+newProj = CRS(
+"+proj=laea +lat_0=45 +lon_0=-100 +x_0=0 +y_0=0 +a=6370997 +b=6370997 +units=m +no_defs")
+county = spTransform(county, newProj)
+county_f  <-  fortify(county, region = "FIPS")
+head(county_f)
+```
+Join the data with the calculated changes for every county.
+```{r county2}
+colnames(county_f)[which(colnames(county_f) == "id")] = "fips"
+county_f  <-  join(county_f, fips_CHG_lim, "fips")
+head(county_f)
+```
+Get the data for the state boundaries.
+```{r sates}
+states  <-  getData("GADM", country = "USA", level = 1) 
+states  <-  states[!(states$NAME_1 %in% c("Alaska", "Hawaii")), ]
+states  <-  spTransform(states, CRS(proj4string(county)))
+states_f  <-  fortify(states, region = "NAME_1")
+head(states_f)
+```
+And set the theme for the plot.
+```{r theme}
+sp_minimal  <- theme_minimal(base_size = 12, base_family = "Verdana") +
+    theme(axis.text = element_blank(),
+          axis.title = element_blank(),
+          axis.ticks = element_blank())
+```
+
+
+Finally, plot the map.
+
+```{r map, echo=FALSE}
+ggplot() + 
+    geom_polygon(data = county_f, 
+                 colour = "white",
+                 size = 0.15,
+                 aes(x = long, y = lat, group = group, fill = category)) +
+    geom_polygon(data = states_f, 
+                 colour = "#999999", 
+                 size = 0.18, 
+                 fill = NA,
+                 aes(x = long, y = lat, group = group)) +
+    coord_equal() +
+    sp_minimal +
+    scale_fill_manual(values = c("-100–0%"="#d1e5f0",
+                                 "0–100%"="#fddbc7",
+                                 "100–200%"="#ef8a62",
+                                 "200–600%"="#b2182b"),
+                      name = expression(paste("Change in emissions"))) +
+    theme(
+        legend.position=c(1,1), 
+        legend.justification=c(0, 1), 
+        legend.key.width=unit(1, "lines"), 
+        plot.margin=unit(c(1, 8, 0.5, 0.5), "lines")
+    )
+```
+
+Map of the USA identifying those counties that experienced a surprisingly high change in emissions from POINT sources between 2005 and 2008. These cases would require closer analysis to discover the cause of the high amount of change. Furthermore, the amount of change was categorized using common sense, but with more information on this topic, the categories could look very different, also with regard of what is considered an outlier.
+
+
 
