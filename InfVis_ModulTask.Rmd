@@ -2,7 +2,7 @@
 title: "MSE InfVis Module Task"
 author: "Balázs Dukai"
 date: "06.05.2015"
-output: html_document
+output: pdf_document
 ---
 
 ## Summary
