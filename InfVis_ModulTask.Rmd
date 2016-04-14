@@ -2,7 +2,7 @@
 title: "MSE InfVis Module Task"
 author: "Balázs Dukai"
 date: "06.05.2015"
-output: pdf_document
+output: html_document
 ---
 
 ## Summary
@@ -29,6 +29,8 @@ library(plyr)
 library(rgdal)
 library(raster)
 library(grid)
+#library(rgeos)
+library(maptools)
 source("R/sum_year.R")
 source("R/percent_change.R")
 ```
@@ -225,7 +227,7 @@ fips_CHG_lim$category <- cut(fips_CHG_lim$Em.change,
 Let's prepare the data for the map. Where the geographical data for the map is directly downloaded from the database of global administrative boundaries.
 First, get and prepare the data for the county boundaries.
 ```{r county1}
-county  <-  readOGR("/home/balazs/Documents/MSE_Geoinformationstechnologie/InfVis/ModulTask/data", "USA_2_GADM_fips", stringsAsFactors = FALSE) # need to provide a full path
+county  <-  readOGR("/home/bdukai/Documents/Studies/MSE_GIT/InfVis/ModulTask/data", "USA_2_GADM_fips", stringsAsFactors = FALSE) # need to provide a full path
 county = county[
     county$NAME_1 != "Alaska" &
         county$NAME_1 != "Hawaii", ]
